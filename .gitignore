@@ -16,6 +16,11 @@ ENV/
 
 # Environment Variables
 .env
+.env.local
+.env.*.local
+*.key
+*.pem
+secrets/
 
 # Secrets
 secrets.json
