@@ -2,15 +2,20 @@ import os
 import json
 from typing import Dict, List
 from github_pr_commenter import GitHubPRCommenter
+from web3_analyzer import Web3Analyzer
+from security_rules import SecurityRules
 
 class SecurityAIAgent:
     """
     AI Agent for analyzing PRs for security vulnerabilities in Web2 and Web3
+    Supports: Ethereum, Solana, Polygon, DeFi, NFTs
     """
     
     def __init__(self):
         self.findings = []
         self.pr_commenter = None
+        self.web3_analyzer = Web3Analyzer()
+        self.security_rules = SecurityRules()
         
         # Initialize PR commenter if running in GitHub Actions
         if os.getenv('GITHUB_TOKEN') and os.getenv('PR_NUMBER'):
@@ -21,95 +26,86 @@ class SecurityAIAgent:
     
     def analyze_pr(self, pr_files: List[str], pr_content: str) -> Dict:
         """
-        Analyze PR for security vulnerabilities
+        Analyze PR for security vulnerabilities using enhanced rules
         """
-        web2_issues = self.check_web2_vulnerabilities(pr_files, pr_content)
-        web3_issues = self.check_web3_vulnerabilities(pr_files, pr_content)
+        # Auto-detect chain type
+        chain_type = self.security_rules.detect_chain_type(pr_content)
+        
+        # Run appropriate analyzer
+        if "solidity" in pr_content.lower() or "pragma" in pr_content.lower():
+            web3_findings = self.web3_analyzer.analyze_ethereum_contract(pr_content)
+        elif "solana" in pr_content.lower() or "anchor" in pr_content.lower():
+            web3_findings = self.web3_analyzer.analyze_solana_program(pr_content)
+        else:
+            web3_findings = self.web3_analyzer.auto_detect_and_analyze(pr_content)
+        
+        # Run all checks
+        all_vulnerabilities = self.security_rules.run_all_checks(pr_content)
+        
+        # Categorize findings
+        web2_issues = [v for v in all_vulnerabilities if v['type'] in [
+            'SQL Injection',
+            'Cross-Site Scripting (XSS)',
+            'Missing CSRF Protection',
+            'Insecure Deserialization',
+            'Hardcoded Secrets',
+            'Broken Authentication',
+        ]]
+        
+        web3_issues = [v for v in all_vulnerabilities if v['type'] in [
+            'Reentrancy Attack',
+            'Integer Overflow/Underflow',
+            'Unchecked Low-Level Call',
+            'Delegatecall Injection',
+            'Timestamp Dependency',
+            'Front-Running Vulnerability',
+            'Missing Zero Address Check',
+            'Missing Access Control',
+            'Flash Loan Attack',
+            'Missing Signer Check (Solana)',
+            'Missing Owner Check (Solana)',
+            'Missing Account Validation (Solana)',
+            'Unchecked Arithmetic (Solana)',
+            'Price Oracle Manipulation',
+            'Missing Slippage Protection',
+            'Arbitrary Token Transfer',
+            'NFT Reentrancy (Minting)',
+            'Unauthorized NFT Burn',
+            'Centralized Metadata',
+        ]]
         
         report = {
-            "web2_issues": web2_issues,
-            "web3_issues": web3_issues,
+            "chain_detected": chain_type.value,
+            "web2_issues": self._format_issues(web2_issues),
+            "web3_issues": self._format_issues(web3_issues),
             "severity_summary": self.get_severity_summary(web2_issues + web3_issues),
-            "recommendation": self.generate_recommendation(web2_issues + web3_issues)
+            "recommendation": self.generate_recommendation(web2_issues + web3_issues),
+            "remediation_guidance": self._get_remediation_for_all(all_vulnerabilities),
         }
         
         return report
     
-    def check_web2_vulnerabilities(self, files: List[str], content: str) -> List[Dict]:
-        """Check for Web2 security vulnerabilities"""
-        issues = []
-        
-        # SQL Injection detection
-        if "execute" in content and "+" in content:
-            issues.append({
-                "type": "SQL Injection",
-                "severity": "HIGH",
-                "description": "Potential SQL injection vulnerability detected - user input concatenated to SQL query",
-                "recommendation": "Use parameterized queries and prepared statements instead of string concatenation"
+    def _format_issues(self, issues: List[Dict]) -> List[Dict]:
+        """Format issues with severity and recommendations"""
+        formatted = []
+        for issue in issues:
+            formatted.append({
+                "type": issue.get('type'),
+                "severity": issue.get('severity').value if hasattr(issue.get('severity'), 'value') else issue.get('severity'),
+                "description": issue.get('description'),
+                "recommendation": self.web3_analyzer.get_remediation_guidance(issue)
             })
-        
-        # XSS detection
-        if "innerHTML" in content or "dangerouslySetInnerHTML" in content:
-            issues.append({
-                "type": "Cross-Site Scripting (XSS)",
-                "severity": "HIGH",
-                "description": "Potential XSS vulnerability detected - innerHTML or dangerouslySetInnerHTML usage",
-                "recommendation": "Sanitize and encode all user inputs before rendering. Use textContent instead of innerHTML"
-            })
-        
-        # CSRF detection
-        if "POST" in content or "PUT" in content:
-            if "csrf" not in content.lower() and "token" not in content.lower():
-                issues.append({
-                    "type": "Missing CSRF Protection",
-                    "severity": "MEDIUM",
-                    "description": "Potential CSRF vulnerability - state-changing request without CSRF token",
-                    "recommendation": "Implement CSRF tokens for all POST/PUT/DELETE requests"
-                })
-        
-        return issues
+        return formatted
     
-    def check_web3_vulnerabilities(self, files: List[str], content: str) -> List[Dict]:
-        """Check for Web3 security vulnerabilities"""
-        issues = []
-        
-        # Reentrancy detection
-        if ".transfer(" in content or ".call{" in content:
-            issues.append({
-                "type": "Reentrancy Attack",
-                "severity": "CRITICAL",
-                "description": "Potential reentrancy vulnerability in smart contract - external call before state update",
-                "recommendation": "Use checks-effects-interactions pattern or ReentrancyGuard from OpenZeppelin"
-            })
-        
-        # Integer overflow detection
-        if "pragma solidity" in content and "0.8" not in content:
-            issues.append({
-                "type": "Integer Overflow/Underflow",
-                "severity": "HIGH",
-                "description": "Potential integer overflow/underflow detected - using Solidity < 0.8",
-                "recommendation": "Use SafeMath library or upgrade to Solidity 0.8+ with automatic overflow checks"
-            })
-        
-        # Unchecked external calls
-        if ".call(" in content and "require(" not in content:
-            issues.append({
-                "type": "Unchecked Low-Level Call",
-                "severity": "HIGH",
-                "description": "Low-level call without proper error handling",
-                "recommendation": "Check return value of call() or use high-level functions with require()"
-            })
-        
-        # Front-running vulnerability
-        if "tx.gasprice" in content or "block.timestamp" in content:
-            issues.append({
-                "type": "Potential Front-Running Vulnerability",
-                "severity": "MEDIUM",
-                "description": "Use of blockchain-dependent variables that can be manipulated",
-                "recommendation": "Avoid relying on tx.gasprice or block.timestamp for critical logic"
-            })
-        
-        return issues
+    def _get_remediation_for_all(self, issues: List[Dict]) -> List[Dict]:
+        """Get remediation guidance for all issues"""
+        return [
+            {
+                "type": issue.get('type'),
+                "guidance": self.web3_analyzer.get_remediation_guidance(issue)
+            }
+            for issue in issues
+        ]
     
     def get_severity_summary(self, issues: List[Dict]) -> Dict:
         """Generate severity summary"""
@@ -117,12 +113,15 @@ class SecurityAIAgent:
             "CRITICAL": 0,
             "HIGH": 0,
             "MEDIUM": 0,
-            "LOW": 0
+            "LOW": 0,
+            "INFO": 0
         }
         
         for issue in issues:
-            severity = issue.get("severity", "LOW")
-            summary[severity] += 1
+            severity = issue.get('severity')
+            if hasattr(severity, 'value'):
+                severity = severity.value
+            summary[severity] = summary.get(severity, 0) + 1
         
         return summary
     
@@ -131,13 +130,13 @@ class SecurityAIAgent:
         if not issues:
             return "✅ No security issues detected. PR appears safe to merge."
         
-        critical = sum(1 for i in issues if i.get("severity") == "CRITICAL")
-        high = sum(1 for i in issues if i.get("severity") == "HIGH")
+        critical = sum(1 for i in issues if (i.get('severity').value if hasattr(i.get('severity'), 'value') else i.get('severity')) == "CRITICAL")
+        high = sum(1 for i in issues if (i.get('severity').value if hasattr(i.get('severity'), 'value') else i.get('severity')) == "HIGH")
         
         if critical > 0:
-            return "🚨 **CRITICAL issues found. DO NOT MERGE** until all critical issues are resolved."
+            return "🚨 **CRITICAL issues found. DO NOT MERGE** until all critical issues are resolved. This code poses significant security risks."
         elif high > 0:
-            return "⚠️ **HIGH severity issues found.** Review and address these issues before merging."
+            return "⚠️ **HIGH severity issues found.** Review and address these issues before merging. Consider security audit."
         else:
             return "ℹ️ **Minor issues found.** Review the recommendations below before merging."
     
@@ -147,7 +146,15 @@ class SecurityAIAgent:
             print("⚠️ PR commenter not initialized - skipping PR comment")
             return False
         
-        return self.pr_commenter.post_security_findings(findings)
+        # Format the findings for the commenter
+        formatted_findings = {
+            "web2_issues": findings.get('web2_issues', []),
+            "web3_issues": findings.get('web3_issues', []),
+            "severity_summary": findings.get('severity_summary', {}),
+            "recommendation": findings.get('recommendation', ''),
+        }
+        
+        return self.pr_commenter.post_security_findings(formatted_findings)
     
     def handle_findings(self, findings: Dict) -> None:
         """Handle security findings (post comment and optionally request changes)"""
@@ -175,9 +182,23 @@ def main():
     
     # Sample PR content for testing
     test_pr_content = """
-    def query_user(user_id):
-        query = "SELECT * FROM users WHERE id = " + str(user_id)
-        return execute(query)
+    // SPDX-License-Identifier: MIT
+    pragma solidity ^0.7.0;
+    
+    contract VulnerableContract {
+        mapping(address => uint) balances;
+        
+        function withdraw(uint amount) public {
+            msg.sender.call{value: amount}("");
+            balances[msg.sender] -= amount;
+        }
+        
+        function transfer(address recipient, uint amount) public {
+            require(balances[msg.sender] >= amount);
+            balances[msg.sender] -= amount;
+            balances[recipient] += amount;
+        }
+    }
     """
     
     # Analyze
@@ -187,11 +208,11 @@ def main():
     agent.handle_findings(findings)
     
     # Print report
-    print("\n" + "="*60)
-    print("SECURITY ANALYSIS REPORT")
-    print("="*60)
-    print(json.dumps(findings, indent=2))
-    print("="*60)
+    print("\n" + "="*80)
+    print("SECURITY ANALYSIS REPORT - ENHANCED WEB3")
+    print("="*80)
+    print(json.dumps(findings, indent=2, default=str))
+    print("="*80)
 
 if __name__ == "__main__":
     main()
