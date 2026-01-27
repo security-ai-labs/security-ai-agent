@@ -37,3 +37,9 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
+
+      - name: Post Analysis Results
+        if: always()
+        run: |
+          echo "✅ Security analysis completed"
+          echo "Check the PR comments for detailed findings"
