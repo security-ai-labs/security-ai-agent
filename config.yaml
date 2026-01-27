@@ -1,0 +1,19 @@
+# Configuration settings for Security AI Agent
+
+# Supported chains
+supported_chains:
+  - chain1
+  - chain2
+  - chain3
+
+# Vulnerability checks
+vulnerability_checks:
+  - check_type1
+  - check_type2
+  - check_type3
+
+# OpenAI settings
+openai_settings:
+  api_key: your_api_key_here
+  model: gpt-4
+  temperature: 0.7
