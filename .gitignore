@@ -1,0 +1,21 @@
+# Python
+*.pyc
+__pycache__/
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE Files
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# Environment Variables
+.env
+
+# Secrets
+secrets.json
