@@ -1,42 +1,23 @@
-# AI Security Agent
+# Security Agent Development Progress
 
-## Overview
-The AI Security Agent is designed to enhance security measures in various applications using artificial intelligence techniques. It focuses on detecting anomalies, predicting potential threats, and automating responses for better security management.
+## Completed
+✅ Clean architecture (src/, config/)
+✅ Comprehensive vulnerability rules (60+ rules)
+✅ File detection and pattern matching
+✅ GitHub PR integration
+✅ Web2 and Web3 vulnerability coverage
 
-## Features
-- Anomaly Detection
-- Threat Prediction
-- Automated Response
-- Integration with existing security systems
+## In Progress
+- Improving Solidity-specific detection
+- Adding more DeFi vulnerability rules
+- Testing with vulnerable contracts
 
-## Installation
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/security-ai-labs/security-ai-agent.git
-   ```
-2. Navigate to the project directory:
-   ```bash
-   cd security-ai-agent
-   ```
-3. Install the required dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+## Next Steps
+- Enhance tx.origin detection
+- Add more assembly-based vulnerabilities
+- Improve false positive filtering
 
-## Usage
-To run the AI Security Agent:
-```bash
-python main.py
-```
-
-## Contributing
-Contributions are welcome! Please submit a pull request or create an issue to discuss potential improvements.
-
-## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Contact
-For questions or feedback, please reach out to the maintainers.
-
-
-## Testing Security Analysiss
+## Key Files
+- config/vulnerability_rules.json - Main rules database
+- src/pattern_matcher.py - Pattern detection logic
+- src/analyzer.py - Main orchestrator
