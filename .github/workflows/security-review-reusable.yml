@@ -1,4 +1,4 @@
-name: Security Review - Reusable Workflow
+name: Security Review - Reusable
 
 on:
   workflow_call:
@@ -27,21 +27,6 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests
-
-      - name: Download Security Agent
-        run: |
-          git clone https://github.com/security-ai-labs/security-ai-agent.git temp-agent
-          cp temp-agent/main.py .
-          cp temp-agent/ai_analyzer.py .
-          cp temp-agent/security_rules.py .
-          cp temp-agent/github_pr_commenter.py .
-          cp temp-agent/config.yaml .
-          cp temp-agent/requirements.txt .
-          rm -rf temp-agent
-
-      - name: Install Agent Dependencies
-        run: |
           pip install -r requirements.txt
 
       - name: Run Security Analysis
@@ -51,9 +36,3 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
-
-      - name: Security Review Complete
-        if: always()
-        run: |
-          echo "✅ Security analysis completed"
-          echo "Check the PR comments for detailed findings"
