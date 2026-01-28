@@ -17,3 +17,10 @@ openai_settings:
   api_key: your_api_key_here
   model: gpt-4
   temperature: 0.7
+
+# Confidence scoring settings
+confidence:
+  min_confidence: 0.3  # Filter out findings below this threshold
+  show_low_confidence: true  # Show low confidence findings with warning
+  boost_critical: 1.2  # Multiply confidence for CRITICAL findings
+
