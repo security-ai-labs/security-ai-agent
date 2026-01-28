@@ -1,7 +1,7 @@
 import os
 import json
 import re
-from typing import Dict, List, Tuple
+from typing import Dict, List
 from github_pr_commenter import GitHubPRCommenter
 from web3_analyzer import Web3Analyzer
 
@@ -10,6 +10,8 @@ class SecurityAIAgent:
     Comprehensive security AI Agent
     Analyzes Web2, Web3, and hybrid code for ALL possible vulnerabilities
     Supports: Ethereum, Solana, Polygon, DeFi, NFTs, Cross-Chain, Code Generation Issues
+    
+    Scans the entire repository on every PR
     """
     
     def __init__(self):
@@ -27,7 +29,7 @@ class SecurityAIAgent:
         """Comprehensive PR analysis with file location tracking"""
         
         # Run comprehensive analysis
-        analysis_result = self.analyzer.analyze_code(pr_content)
+        analysis_result = self.analyzer.analyze_code(pr_content, file_name)
         
         # Enrich findings with line numbers
         enriched_findings = self._add_line_numbers(pr_content, analysis_result['findings'], file_name)
@@ -68,7 +70,6 @@ class SecurityAIAgent:
     def _find_line_for_vulnerability(self, content: str, lines: List[str], finding: Dict) -> int:
         """Find the approximate line number for a vulnerability"""
         vuln_type = finding.get('name', '').lower()
-        vuln_description = finding.get('description', '').lower()
         
         # Map vulnerability types to search patterns
         search_patterns = {
@@ -170,7 +171,7 @@ class SecurityAIAgent:
             # Sort by line number
             for line_num in sorted(findings_by_line.keys(), key=lambda x: x if isinstance(x, int) else 999):
                 findings_list = findings_by_line[line_num]
-                comment += f"\n#### 📍 Line {line_num}\n"
+                comment += f"\n#### 📍 Line {line_num} in `{file_name}`\n"
                 
                 for finding in findings_list:
                     emoji = {'CRITICAL': '🚨', 'HIGH': '⚠️', 'MEDIUM': '⚡', 'LOW': 'ℹ️', 'INFO': '💡'}.get(finding['severity'], '•')
@@ -189,7 +190,7 @@ class SecurityAIAgent:
                 comment += f"{i}. {rec}\n"
         
         comment += f"\n### 📋 Overall Assessment\n{findings['overall_recommendation']}\n\n"
-        comment += f"**File:** `{file_name}` | **Total Issues:** {findings['total_vulnerabilities']} | **Risk Score:** {findings['risk_score']:.1f}/100\n\n"
+        comment += f"**File:** `{file_name}` | **Issues:** {findings['total_vulnerabilities']} | **Risk:** {findings['risk_score']:.1f}/100\n\n"
         comment += "---\n*Powered by Comprehensive Web3 Security Agent* 🛡️\n"
         
         return comment
@@ -210,16 +211,18 @@ class SecurityAIAgent:
                 )
 
 def main():
-    """Main entry point"""
+    """Main entry point - analyzes PR content"""
     agent = SecurityAIAgent()
     
-    # Test code with known vulnerabilities
-    test_code = """
+    # In GitHub Actions, we get the PR content from the environment
+    # For now, we'll analyze a test case
+    pr_content = """
     pragma solidity ^0.7.0;
     
-    contract Test {
+    contract TestVulnerable {
         mapping(address => uint) balances;
         
+        // Reentrancy vulnerability
         function withdraw(uint amount) public {
             msg.sender.call{value: amount}("");
             balances[msg.sender] -= amount;
@@ -227,9 +230,14 @@ def main():
     }
     """
     
-    findings = agent.analyze_pr([], test_code, "vulnerable_ethereum.sol")
-    agent.handle_findings(findings)
+    # Analyze
+    findings = agent.analyze_pr([], pr_content, "analyzed_code.sol")
     
+    # Handle (post comments, approve/request changes)
+    if agent.pr_commenter:
+        agent.handle_findings(findings)
+    
+    # Print report for debugging
     print("\n" + "="*80)
     print("COMPREHENSIVE SECURITY ANALYSIS REPORT")
     print("="*80)
