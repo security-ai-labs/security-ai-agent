@@ -9,7 +9,7 @@ class SecurityAIAgent:
     """
     Comprehensive security AI Agent
     Analyzes Web2, Web3, and hybrid code for ALL possible vulnerabilities
-    Scans the entire repository on every PR
+    Scans security-relevant files in the repository
     """
     
     def __init__(self):
@@ -71,14 +71,14 @@ class SecurityAIAgent:
         
         # Map vulnerability types to search patterns
         search_patterns = {
-            'hardcoded_secrets': [r'password\s*=|api[_-]?key|secret[_-]?key|private[_-]?key|credentials'],
+            'hardcoded_secrets': [r'password\s*=|api[_-]?key|secret[_-]?key|private[_-]?key|credentials|PRIVATE_KEY|ADMIN\s*='],
             'sql_injection': [r'execute\s*\(|query\s*\(|SELECT.*WHERE.*\+'],
             'xss': [r'innerHTML|dangerouslySetInnerHTML|eval\s*\(|document\.write'],
             'reentrancy': [r'\.call\{.*value|\.transfer\s*\(|\.send\s*\('],
             'integer_overflow': [r'pragma solidity\s+\^?0\.[0-7]|\+=\s*\w+|\-=\s*\w+'],
             'unchecked_call': [r'\.call\s*\(\s*\)(?!.*require)|\.delegatecall'],
             'delegatecall_to_untrusted': [r'delegatecall\s*\('],
-            'missing_zero_address_check': [r'transfer.*to|_to\s*='],
+            'missing_zero_address_check': [r'transfer.*to|_to\s*=|address\(0\)'],
             'missing_access_control': [r'function\s+\w+.*public|function\s+\w+.*external(?!.*onlyOwner)'],
             'flash_loan': [r'flashLoan|receiveFlashLoan'],
             'timestamp_manipulation': [r'block\.timestamp|now\s*[><=]'],
@@ -208,38 +208,55 @@ class SecurityAIAgent:
                     f"✅ No security issues found in {findings.get('file_name', 'code')}"
                 )
 
-def get_python_files(directory='.'):
-    """Get all Python files in the repository"""
-    python_files = []
+def get_security_relevant_files(directory='.', exclude_dirs=None):
+    """
+    Get all security-relevant files from the repository
+    Includes: .sol, .rs, .js, .ts, .py, .go, .java, .yml, .yaml
+    """
+    if exclude_dirs is None:
+        exclude_dirs = {'.git', '__pycache__', 'node_modules', '.venv', 'venv', 'env', 
+                       'temp-agent', 'artifacts', 'dist', 'build', '.idea', '.vscode'}
+    
+    security_extensions = {
+        '.sol',   # Solidity
+        '.rs',    # Rust (Solana)
+        '.js',    # JavaScript
+        '.ts',    # TypeScript
+        '.py',    # Python
+        '.go',    # Go
+        '.java',  # Java
+        '.yml',   # YAML
+        '.yaml',  # YAML
+    }
+    
+    security_files = []
+    
     for root, dirs, files in os.walk(directory):
-        # Skip hidden directories and common non-code directories
-        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['__pycache__', 'node_modules', 'venv', 'env']]
+        # Remove excluded directories from traversal
+        dirs[:] = [d for d in dirs if d not in exclude_dirs]
         
         for file in files:
-            if file.endswith('.py') and not file.startswith('temp-'):
+            # Check if file has security-relevant extension
+            if any(file.endswith(ext) for ext in security_extensions):
                 filepath = os.path.join(root, file)
-                python_files.append(filepath)
-    return python_files
+                # Skip temporary files
+                if not file.startswith('temp-') and not file.startswith('.'):
+                    security_files.append(filepath)
+    
+    return sorted(security_files)
 
 def main():
-    """Main entry point - analyzes repository files"""
+    """Main entry point - analyzes all security-relevant files"""
     agent = SecurityAIAgent()
     
-    # Get all security agent files
-    python_files = get_python_files('.')
+    # Get all security-relevant files
+    security_files = get_security_relevant_files('.')
     
-    # Filter to only analyze actual code (not temporary files)
-    python_files = [f for f in python_files if 'main.py' in f or 'test' in f.lower()]
+    print(f"\n🔍 Security Analysis Starting\n")
+    print(f"📁 Found {len(security_files)} security-relevant file(s)\n")
     
-    if not python_files:
-        print("⚠️ No Python files found to analyze")
-        # Fallback: analyze the current repository
-        python_files = ['main.py'] if os.path.exists('main.py') else []
-    
-    print(f"\n📁 Found {len(python_files)} Python file(s) to analyze\n")
-    
-    if not python_files:
-        print("ℹ️ No code files to analyze in this PR")
+    if not security_files:
+        print("ℹ️ No security-relevant code files found in this PR")
         return
     
     all_findings = {
@@ -257,10 +274,15 @@ def main():
     }
     
     # Analyze each file
-    for filepath in python_files:
+    for filepath in security_files:
         try:
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
+            
+            # Skip empty files
+            if not content.strip():
+                print(f"⏭️  Skipping (empty): {filepath}\n")
+                continue
             
             print(f"🔍 Analyzing: {filepath}")
             
@@ -283,7 +305,7 @@ def main():
             print(f"   ✅ Found {findings['total_vulnerabilities']} issue(s)\n")
         
         except Exception as e:
-            print(f"   ❌ Error: {str(e)}\n")
+            print(f"   ❌ Error analyzing: {str(e)}\n")
             continue
     
     # Post findings to PR
@@ -293,12 +315,22 @@ def main():
         for filepath, findings in all_findings['findings_by_file'].items():
             if findings['total_vulnerabilities'] > 0:
                 agent.post_findings_to_pr(findings)
+                print(f"   ✅ Posted comment for {filepath}")
+        
+        print("\n✅ All findings posted to PR!")
     else:
         # Print for local testing
         print("\n" + "="*80)
         print("ANALYSIS RESULTS")
         print("="*80)
-        print(json.dumps(all_findings, indent=2, default=str))
+        if all_findings['files_analyzed']:
+            for filepath, findings in all_findings['findings_by_file'].items():
+                print(f"\n📄 {filepath}")
+                print(f"   Total Vulnerabilities: {findings['total_vulnerabilities']}")
+                print(f"   Risk Score: {findings['risk_score']:.1f}/100")
+                print(f"   Chain: {findings['detected_chain']}")
+        else:
+            print("No security-relevant files found")
         print("="*80)
 
 if __name__ == "__main__":
