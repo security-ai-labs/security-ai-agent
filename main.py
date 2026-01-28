@@ -208,21 +208,36 @@ class SecurityAIAgent:
                     f"✅ No security issues found in {findings.get('file_name', 'code')}"
                 )
 
+def is_security_agent_file(filepath: str) -> bool:
+    """Check if the file is part of the security agent itself"""
+    agent_files = {
+        'main.py',
+        'web3_analyzer.py',
+        'github_pr_commenter.py',
+        'security_rules.py',
+        'requirements.txt',
+    }
+    
+    filename = os.path.basename(filepath)
+    return filename in agent_files
+
 def get_security_relevant_files(directory='.', exclude_dirs=None):
     """
     Get all security-relevant files from the repository
     Includes: .sol, .rs, .js, .ts, .py, .go, .java, .yml, .yaml
+    Excludes: Security agent files and temporary files
     """
     if exclude_dirs is None:
         exclude_dirs = {'.git', '__pycache__', 'node_modules', '.venv', 'venv', 'env', 
-                       'temp-agent', 'artifacts', 'dist', 'build', '.idea', '.vscode'}
+                       'temp-agent', 'artifacts', 'dist', 'build', '.idea', '.vscode', 
+                       '.github', '.pytest_cache', 'htmlcov'}
     
     security_extensions = {
         '.sol',   # Solidity
         '.rs',    # Rust (Solana)
         '.js',    # JavaScript
         '.ts',    # TypeScript
-        '.py',    # Python
+        '.py',    # Python (but not security agent files)
         '.go',    # Go
         '.java',  # Java
         '.yml',   # YAML
@@ -239,9 +254,17 @@ def get_security_relevant_files(directory='.', exclude_dirs=None):
             # Check if file has security-relevant extension
             if any(file.endswith(ext) for ext in security_extensions):
                 filepath = os.path.join(root, file)
+                
+                # Skip security agent files
+                if is_security_agent_file(filepath):
+                    print(f"⏭️  Skipping (security agent file): {filepath}")
+                    continue
+                
                 # Skip temporary files
-                if not file.startswith('temp-') and not file.startswith('.'):
-                    security_files.append(filepath)
+                if file.startswith('temp-') or file.startswith('.'):
+                    continue
+                
+                security_files.append(filepath)
     
     return sorted(security_files)
 
@@ -249,7 +272,7 @@ def main():
     """Main entry point - analyzes all security-relevant files"""
     agent = SecurityAIAgent()
     
-    # Get all security-relevant files
+    # Get all security-relevant files (excluding agent files)
     security_files = get_security_relevant_files('.')
     
     print(f"\n🔍 Security Analysis Starting\n")
