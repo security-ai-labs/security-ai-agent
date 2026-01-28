@@ -13,7 +13,7 @@ class ReportGenerator:
     
     @staticmethod
     def generate_comment(filepath: str, vulnerabilities: List[Dict]) -> str:
-        """Generate PR comment for a file with vulnerabilities
+        """Generate PR comment with confidence scores
         
         Args:
             filepath: Path to analyzed file
@@ -25,6 +25,9 @@ class ReportGenerator:
         
         if not vulnerabilities:
             return f"✅ **No vulnerabilities found** in `{filepath}`"
+        
+        # Sort by confidence (highest first)
+        vulnerabilities = sorted(vulnerabilities, key=lambda v: v.get('confidence', 0), reverse=True)
         
         # Count by severity
         severity_counts = {}
@@ -45,14 +48,24 @@ class ReportGenerator:
                 emoji = ReportGenerator.SEVERITY_EMOJI.get(severity, '•')
                 comment += f"- {emoji} **{severity}:** {count}\n"
         
-        comment += "\n### Vulnerabilities\n"
+        comment += "\n### Vulnerabilities (sorted by confidence)\n"
         
-        # Add each vulnerability
+        # Add each vulnerability with confidence
         for vuln in vulnerabilities:
             emoji = ReportGenerator.SEVERITY_EMOJI.get(vuln['severity'], '•')
+            confidence = vuln.get('confidence', 0)
+            confidence_label = vuln.get('confidence_label', 'UNKNOWN')
+            
+            # Confidence indicator
+            if confidence >= 0.75:
+                conf_indicator = "🔴"
+            elif confidence >= 0.50:
+                conf_indicator = "🟡"
+            else:
+                conf_indicator = "⚪"
             
             comment += f"""
-{emoji} **{vuln['name']}** (Line {vuln['line']})
+{emoji} **{vuln['name']}** (Line {vuln['line']}) {conf_indicator} Confidence: {confidence_label} ({confidence:.0%})
 - **Severity:** `{vuln['severity']}`
 - **Issue:** {vuln['description']}
 - **Solution:** {vuln['remediation']}
@@ -64,7 +77,9 @@ class ReportGenerator:
                 for example in vuln['examples'][:2]:  # Show max 2 examples
                     comment += f"  - `{example}`\n"
         
-        comment += "\n---\n*Powered by Web3 Security Agent* 🛡️\n"
+        comment += "\n---\n"
+        comment += "🔴 High Confidence | 🟡 Medium Confidence | ⚪ Low Confidence\n"
+        comment += "*Powered by Web3 Security Agent* 🛡️\n"
         
         return comment
     

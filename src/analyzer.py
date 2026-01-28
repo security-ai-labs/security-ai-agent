@@ -3,6 +3,7 @@ from typing import List, Dict, Tuple
 from file_detector import FileDetector
 from pattern_matcher import PatternMatcher
 from report_generator import ReportGenerator
+from confidence_scorer import ConfidenceScorer
 
 class SecurityAnalyzer:
     """Main security analyzer - orchestrates file detection, pattern matching, and reporting"""
@@ -11,6 +12,7 @@ class SecurityAnalyzer:
         """Initialize analyzer with rules"""
         self.matcher = PatternMatcher(rules_file)
         self.reporter = ReportGenerator()
+        self.scorer = ConfidenceScorer()
     
     def analyze_repository(self, directory: str = '.') -> Dict:
         """Analyze all files in repository
@@ -69,7 +71,7 @@ class SecurityAnalyzer:
         return results
     
     def _analyze_file(self, filepath: str, chain: str, language: str) -> Dict:
-        """Analyze single file"""
+        """Analyze single file with confidence scoring"""
         try:
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
@@ -78,6 +80,14 @@ class SecurityAnalyzer:
             
             # Find vulnerabilities
             vulnerabilities = self.matcher.find_vulnerabilities(filepath, content, chain)
+            
+            # Add confidence scores to each vulnerability
+            for vuln in vulnerabilities:
+                vuln['filepath'] = filepath
+                self.scorer.calculate_confidence(vuln, content)
+            
+            # Filter out very low confidence findings (optional)
+            # vulnerabilities = [v for v in vulnerabilities if v['confidence'] >= 0.3]
             
             if vulnerabilities:
                 print(f" ⚠️  {len(vulnerabilities)} issue(s)")
