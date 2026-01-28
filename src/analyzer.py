@@ -101,6 +101,19 @@ class SecurityAnalyzer:
                 'error': str(e)
             }
     
+    def _analyze_file_content(self, content: str, chain: str, language: str) -> List[Dict]:
+        """Analyze code content directly (for testing)
+        
+        Args:
+            content: Code to analyze
+            chain: Blockchain/platform (e.g., 'ethereum', 'solana', 'web2', 'defi')
+            language: Programming language (e.g., 'solidity', 'rust', 'python', 'javascript')
+        
+        Returns:
+            List of vulnerabilities found
+        """
+        return self.matcher.find_vulnerabilities('test_file', content, chain)
+    
     @staticmethod
     def _empty_results() -> Dict:
         """Return empty results dict"""
