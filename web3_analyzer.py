@@ -3,19 +3,20 @@ from security_rules import SecurityRules
 
 class Web3Analyzer:
     """
-    Comprehensive Web3 security analyzer
+    Comprehensive Web3 security analyzer with file and line tracking
     Analyzes all vulnerability types across chains and code styles
     """
     
     def __init__(self):
         self.rules = SecurityRules()
     
-    def analyze_code(self, code: str) -> Dict:
-        """Comprehensive code analysis"""
+    def analyze_code(self, code: str, file_name: str = "code") -> Dict:
+        """Comprehensive code analysis with file name tracking"""
         findings, chain, code_type = self.rules.run_all_checks(code)
         summary = self.rules.get_findings_summary(findings)
         
         return {
+            'file_name': file_name,
             'detected_chain': chain,
             'detected_code_type': code_type,
             'total_vulnerabilities': summary['total'],
