@@ -195,7 +195,7 @@ class TestRequiredContext:
                 "sql_test": {
                     "name": "SQL Test",
                     "patterns": ["execute("],
-                    "required_context": ["select", "insert"],
+                    "required_context": ["SELECT", "insert"],  # Mixed case
                     "context_window": 2,
                     "severity": "CRITICAL"
                 }
@@ -209,21 +209,29 @@ class TestRequiredContext:
         try:
             matcher = PatternMatcher(rules_file)
             
-            # Should flag (SELECT in uppercase)
+            # Should flag (SELECT in uppercase, context item also uppercase)
             vulnerable = """
             query = "SELECT * FROM users"
             execute(query)
             """
             vulns = matcher.find_vulnerabilities('app.py', vulnerable, 'web2')
-            assert len(vulns) > 0, "Should detect with uppercase SELECT"
+            assert len(vulns) > 0, "Should detect with uppercase SELECT matching uppercase context"
             
-            # Should flag (select in lowercase)
+            # Should flag (select in lowercase, context item in uppercase)
             vulnerable2 = """
             query = "select * from users"
             execute(query)
             """
             vulns = matcher.find_vulnerabilities('app.py', vulnerable2, 'web2')
-            assert len(vulns) > 0, "Should detect with lowercase select"
+            assert len(vulns) > 0, "Should detect with lowercase select matching uppercase context"
+            
+            # Should flag (INSERT in uppercase, context item in lowercase)
+            vulnerable3 = """
+            query = "INSERT INTO users VALUES"
+            execute(query)
+            """
+            vulns = matcher.find_vulnerabilities('app.py', vulnerable3, 'web2')
+            assert len(vulns) > 0, "Should detect with uppercase INSERT matching lowercase context"
             
             # Should NOT flag (no SQL keywords)
             safe = """

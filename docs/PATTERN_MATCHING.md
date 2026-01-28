@@ -305,7 +305,8 @@ Result: Vulnerability reported (correct detection)
 **DO:**
 - Include security-relevant keywords (`owner`, `admin`, `auth`)
 - Include user input indicators (`user`, `input`, `param`)
-- Include operation types (`SELECT`, `INSERT`, `UPDATE`)
+- Include operation types (`select`, `insert`, `update`)
+- Use lowercase for consistency (matching is case-insensitive)
 
 **DON'T:**
 - Require context so specific that real vulnerabilities are missed
@@ -332,7 +333,7 @@ The enhanced pattern matching is optimized for performance:
 - **Line-based processing:** Only checks lines containing patterns
 - **Short-circuit evaluation:** Stops at first successful filter
 - **Efficient context extraction:** Minimal string operations
-- **Regex caching:** Regular expressions are compiled once
+- **Duplicate elimination:** Uses sets to avoid redundant checks
 
 **Performance Impact:**
 - Typical overhead: <10% compared to simple pattern matching

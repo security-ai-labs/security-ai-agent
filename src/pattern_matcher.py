@@ -65,17 +65,21 @@ class PatternMatcher:
         context_window = rule.get('context_window', 5)
         
         # Step 1: Check if any pattern matches
-        matched_lines = []
+        matched_lines = set()  # Use set to avoid duplicates
         for pattern in patterns:
             if pattern.startswith('regex:'):
                 # Regex pattern
                 regex_pattern = pattern[6:]  # Remove 'regex:' prefix
-                if re.search(regex_pattern, content):
-                    matched_lines.extend(self._find_regex_lines(content, regex_pattern))
+                try:
+                    if re.search(regex_pattern, content):
+                        matched_lines.update(self._find_regex_lines(content, regex_pattern))
+                except re.error:
+                    # Invalid regex pattern, skip it
+                    continue
             else:
                 # Literal string pattern
                 if pattern in content:
-                    matched_lines.extend(self._find_pattern_lines(content, pattern))
+                    matched_lines.update(self._find_pattern_lines(content, pattern))
         
         if not matched_lines:
             return False
@@ -85,13 +89,13 @@ class PatternMatcher:
             for line_num in matched_lines:
                 context = self._extract_context(content, line_num, context_window)
                 
-                # If any exclude pattern is in context, skip this match
-                if any(excl in context for excl in exclude_patterns):
+                # If any exclude pattern is in context, skip this match (case-insensitive)
+                if any(excl.lower() in context.lower() for excl in exclude_patterns):
                     continue
                 
                 # Step 3: Check required context (if specified)
                 if required_context:
-                    if not any(ctx in context.lower() for ctx in required_context):
+                    if not any(ctx.lower() in context.lower() for ctx in required_context):
                         continue
                 
                 # This match passed all filters
@@ -104,7 +108,7 @@ class PatternMatcher:
         if required_context:
             for line_num in matched_lines:
                 context = self._extract_context(content, line_num, context_window)
-                if any(ctx in context.lower() for ctx in required_context):
+                if any(ctx.lower() in context.lower() for ctx in required_context):
                     return True
             return False
         
@@ -152,9 +156,13 @@ class PatternMatcher:
         """
         lines = content.split('\n')
         line_nums = []
-        for i, line in enumerate(lines):
-            if re.search(regex_pattern, line):
-                line_nums.append(i + 1)
+        try:
+            for i, line in enumerate(lines):
+                if re.search(regex_pattern, line):
+                    line_nums.append(i + 1)
+        except re.error:
+            # Invalid regex pattern, return empty list
+            pass
         return line_nums
     
     @staticmethod
@@ -186,9 +194,13 @@ class PatternMatcher:
             # Handle regex patterns
             if pattern.startswith('regex:'):
                 regex_pattern = pattern[6:]
-                for line_num, line in enumerate(lines, 1):
-                    if re.search(regex_pattern, line):
-                        return line_num
+                try:
+                    for line_num, line in enumerate(lines, 1):
+                        if re.search(regex_pattern, line):
+                            return line_num
+                except re.error:
+                    # Invalid regex pattern, skip it
+                    continue
             else:
                 # Literal pattern
                 for line_num, line in enumerate(lines, 1):
