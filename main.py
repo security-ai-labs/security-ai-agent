@@ -9,8 +9,6 @@ class SecurityAIAgent:
     """
     Comprehensive security AI Agent
     Analyzes Web2, Web3, and hybrid code for ALL possible vulnerabilities
-    Supports: Ethereum, Solana, Polygon, DeFi, NFTs, Cross-Chain, Code Generation Issues
-    
     Scans the entire repository on every PR
     """
     
@@ -210,39 +208,98 @@ class SecurityAIAgent:
                     f"✅ No security issues found in {findings.get('file_name', 'code')}"
                 )
 
+def get_python_files(directory='.'):
+    """Get all Python files in the repository"""
+    python_files = []
+    for root, dirs, files in os.walk(directory):
+        # Skip hidden directories and common non-code directories
+        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['__pycache__', 'node_modules', 'venv', 'env']]
+        
+        for file in files:
+            if file.endswith('.py') and not file.startswith('temp-'):
+                filepath = os.path.join(root, file)
+                python_files.append(filepath)
+    return python_files
+
 def main():
-    """Main entry point - analyzes PR content"""
+    """Main entry point - analyzes repository files"""
     agent = SecurityAIAgent()
     
-    # In GitHub Actions, we get the PR content from the environment
-    # For now, we'll analyze a test case
-    pr_content = """
-    pragma solidity ^0.7.0;
+    # Get all security agent files
+    python_files = get_python_files('.')
     
-    contract TestVulnerable {
-        mapping(address => uint) balances;
-        
-        // Reentrancy vulnerability
-        function withdraw(uint amount) public {
-            msg.sender.call{value: amount}("");
-            balances[msg.sender] -= amount;
-        }
+    # Filter to only analyze actual code (not temporary files)
+    python_files = [f for f in python_files if 'main.py' in f or 'test' in f.lower()]
+    
+    if not python_files:
+        print("⚠️ No Python files found to analyze")
+        # Fallback: analyze the current repository
+        python_files = ['main.py'] if os.path.exists('main.py') else []
+    
+    print(f"\n📁 Found {len(python_files)} Python file(s) to analyze\n")
+    
+    if not python_files:
+        print("ℹ️ No code files to analyze in this PR")
+        return
+    
+    all_findings = {
+        'total_vulnerabilities': 0,
+        'files_analyzed': [],
+        'severity_summary': {
+            'CRITICAL': 0,
+            'HIGH': 0,
+            'MEDIUM': 0,
+            'LOW': 0,
+            'INFO': 0,
+        },
+        'category_summary': {},
+        'findings_by_file': {},
     }
-    """
     
-    # Analyze
-    findings = agent.analyze_pr([], pr_content, "analyzed_code.sol")
+    # Analyze each file
+    for filepath in python_files:
+        try:
+            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            
+            print(f"🔍 Analyzing: {filepath}")
+            
+            # Analyze the file
+            findings = agent.analyze_pr([], content, filepath)
+            
+            # Store findings
+            all_findings['files_analyzed'].append(filepath)
+            all_findings['findings_by_file'][filepath] = findings
+            
+            # Aggregate summary
+            all_findings['total_vulnerabilities'] += findings['total_vulnerabilities']
+            
+            for severity, count in findings['severity_summary'].items():
+                all_findings['severity_summary'][severity] += count
+            
+            for category, count in findings['category_summary'].items():
+                all_findings['category_summary'][category] = all_findings['category_summary'].get(category, 0) + count
+            
+            print(f"   ✅ Found {findings['total_vulnerabilities']} issue(s)\n")
+        
+        except Exception as e:
+            print(f"   ❌ Error: {str(e)}\n")
+            continue
     
-    # Handle (post comments, approve/request changes)
-    if agent.pr_commenter:
-        agent.handle_findings(findings)
-    
-    # Print report for debugging
-    print("\n" + "="*80)
-    print("COMPREHENSIVE SECURITY ANALYSIS REPORT")
-    print("="*80)
-    print(json.dumps(findings, indent=2, default=str))
-    print("="*80)
+    # Post findings to PR
+    if agent.pr_commenter and all_findings['files_analyzed']:
+        print("📤 Posting security findings to PR...\n")
+        
+        for filepath, findings in all_findings['findings_by_file'].items():
+            if findings['total_vulnerabilities'] > 0:
+                agent.post_findings_to_pr(findings)
+    else:
+        # Print for local testing
+        print("\n" + "="*80)
+        print("ANALYSIS RESULTS")
+        print("="*80)
+        print(json.dumps(all_findings, indent=2, default=str))
+        print("="*80)
 
 if __name__ == "__main__":
     main()
