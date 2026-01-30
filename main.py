@@ -174,6 +174,9 @@ def main():
         elif results['total_vulnerabilities'] > 0:
             print("⚠️ Issues found - Passing with warnings")
             return 0
+        else:
+            print("✅ No issues found")
+            return 0
     
     # Default: always succeed, just report
     if results['severity_counts'].get('CRITICAL', 0) > 0:
