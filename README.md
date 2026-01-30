@@ -81,6 +81,22 @@ python main.py --target /path/to/repo --rules custom_rules.json
 python main.py --target /path/to/repo --output results.json
 ```
 
+### Strict Mode (Exit with Error on Critical Issues)
+```bash
+python main.py --target /path/to/repo --strict
+```
+
+By default, the analyzer always exits with code 0 (success) and reports findings. Use `--strict` mode in CI/CD pipelines when you want the workflow to fail if CRITICAL issues are found.
+
+**Default behavior (without --strict):**
+- Exit code 0: Always succeeds, just reports findings
+- Useful for: Non-blocking security scans, informational reports
+
+**Strict mode (with --strict):**
+- Exit code 1: Fails if CRITICAL issues found
+- Exit code 0: No CRITICAL issues (but may have other issues)
+- Useful for: Blocking merges with critical security issues
+
 ### Use in CI/CD (Scan External Repository)
 ```bash
 # Clone target repository
@@ -101,6 +117,22 @@ python github_pr_commenter.py
 ```
 
 Automatically comments on pull requests with security findings.
+
+## Output Format
+
+The analyzer displays **relative paths** in all output (console, JSON, PR comments) instead of absolute paths for better readability:
+
+**Example output:**
+```
+🔍 Security Analysis: ethereum/vulnerable_erc20.sol
+```
+
+Instead of:
+```
+🔍 Security Analysis: /home/runner/work/vulnerable-code-examples/vulnerable-code-examples/target-repo/ethereum/vulnerable_erc20.sol
+```
+
+This makes the output cleaner and more portable across different environments.
 
 ## Testing
 
