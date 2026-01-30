@@ -21,8 +21,11 @@ class SecurityAnalyzer:
             Dictionary with analysis results
         """
         
+        # Convert to absolute path for traversal
+        abs_directory = os.path.abspath(directory)
+        
         # Find all security-relevant files
-        files_to_analyze = FileDetector.find_files(directory)
+        files_to_analyze = FileDetector.find_files(abs_directory)
         
         print(f"\n🛡️  Web3 Security Analyzer")
         print(f"📁 Found {len(files_to_analyze)} security-relevant files\n")
@@ -44,7 +47,14 @@ class SecurityAnalyzer:
         
         # Analyze each file
         for filepath, chain, language in files_to_analyze:
-            result = self._analyze_file(filepath, chain, language)
+            # Calculate relative path from target directory
+            try:
+                relative_path = os.path.relpath(filepath, abs_directory)
+            except ValueError:
+                # If relpath fails (different drives on Windows), use basename
+                relative_path = os.path.basename(filepath)
+            
+            result = self._analyze_file(filepath, chain, language, relative_path)
             
             if result['vulnerabilities']:
                 results['files_with_issues'] += 1
@@ -56,13 +66,13 @@ class SecurityAnalyzer:
                     if severity in results['severity_counts']:
                         results['severity_counts'][severity] += 1
                 
-                # Generate comment
-                comment = self.reporter.generate_comment(filepath, result['vulnerabilities'])
+                # Generate comment with relative path
+                comment = self.reporter.generate_comment(relative_path, result['vulnerabilities'])
                 results['comments'].append(comment)
                 results['details'].append(result)
             
             results['files_analyzed'].append({
-                'filepath': filepath,
+                'filepath': relative_path,  # Use relative path
                 'chain': chain,
                 'language': language,
                 'vulnerabilities': len(result['vulnerabilities'])
@@ -70,20 +80,30 @@ class SecurityAnalyzer:
         
         return results
     
-    def _analyze_file(self, filepath: str, chain: str, language: str) -> Dict:
-        """Analyze single file with confidence scoring"""
+    def _analyze_file(self, filepath: str, chain: str, language: str, display_path: str = None) -> Dict:
+        """Analyze single file with confidence scoring
+        
+        Args:
+            filepath: Absolute path to file
+            chain: Blockchain/platform
+            language: Programming language
+            display_path: Relative path for display (optional)
+        """
+        if display_path is None:
+            display_path = filepath
+        
         try:
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
             
-            print(f"📄 Analyzing: {filepath:40} ({language:10})", end='')
+            print(f"📄 Analyzing: {display_path:40} ({language:10})", end='')
             
             # Find vulnerabilities
-            vulnerabilities = self.matcher.find_vulnerabilities(filepath, content, chain)
+            vulnerabilities = self.matcher.find_vulnerabilities(display_path, content, chain)
             
             # Add confidence scores to each vulnerability
             for vuln in vulnerabilities:
-                vuln['filepath'] = filepath
+                vuln['filepath'] = display_path  # Use relative path
                 self.scorer.calculate_confidence(vuln, content)
             
             # Filter out very low confidence findings (optional)
@@ -95,7 +115,7 @@ class SecurityAnalyzer:
                 print(f" ✅")
             
             return {
-                'filepath': filepath,
+                'filepath': display_path,  # Use relative path
                 'chain': chain,
                 'language': language,
                 'vulnerabilities': vulnerabilities
@@ -104,7 +124,7 @@ class SecurityAnalyzer:
         except Exception as e:
             print(f" ❌ Error: {str(e)}")
             return {
-                'filepath': filepath,
+                'filepath': display_path,  # Use relative path
                 'chain': chain,
                 'language': language,
                 'vulnerabilities': [],
