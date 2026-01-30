@@ -65,6 +65,15 @@ pip install pytest-xdist
 pytest tests/ -n auto
 ```
 
+## Running Tests with Target Directory
+
+### Test with Sample Vulnerable Code
+
+```bash
+# Test with sample vulnerable code
+python main.py --target tests/fixtures/vulnerable_contracts/
+```
+
 ## Test Coverage
 
 ### Ethereum/Solidity (8 vulnerability types)
