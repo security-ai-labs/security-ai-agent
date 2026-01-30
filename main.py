@@ -7,6 +7,7 @@ Analyzes code repositories for Web2 and Web3 vulnerabilities
 import os
 import sys
 import argparse
+import json
 
 # Add src to path - use absolute path relative to script location
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -101,6 +102,10 @@ def main():
         print(f"❌ Error: Target directory does not exist: {target_dir}")
         return 1
     
+    if not os.path.isdir(target_dir):
+        print(f"❌ Error: Target path is not a directory: {target_dir}")
+        return 1
+    
     print("\n" + "="*60)
     print("  🛡️  Web3 Security Agent")
     print("="*60)
@@ -111,11 +116,14 @@ def main():
     # If rules path is relative, make it relative to script location
     rules_path = args.rules
     if not os.path.isabs(rules_path):
-        script_dir = os.path.dirname(os.path.abspath(__file__))
         rules_path = os.path.join(script_dir, rules_path)
     
     if not os.path.exists(rules_path):
         print(f"❌ Error: Rules file not found: {rules_path}")
+        return 1
+    
+    if not os.path.isfile(rules_path):
+        print(f"❌ Error: Rules path is not a file: {rules_path}")
         return 1
     
     analyzer = SecurityAnalyzer(rules_path)
@@ -142,10 +150,12 @@ def main():
     
     # Save output if requested
     if args.output:
-        import json
-        with open(args.output, 'w') as f:
-            json.dump(results, f, indent=2)
-        print(f"📝 Results saved to: {args.output}\n")
+        try:
+            with open(args.output, 'w') as f:
+                json.dump(results, f, indent=2)
+            print(f"📝 Results saved to: {args.output}\n")
+        except (IOError, OSError) as e:
+            print(f"⚠️  Error saving results to {args.output}: {str(e)}\n")
     
     # Post to GitHub if in Actions
     if results['comments']:
