@@ -6,8 +6,6 @@ import os
 import tempfile
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
-
 from analyzer import SecurityAnalyzer
 
 
@@ -126,7 +124,7 @@ class TestRelativePaths:
 class TestExitCodeBehavior:
     """Tests for exit code behavior in main module"""
     
-    def test_main_returns_zero_by_default_with_critical(self, tmp_path):
+    def test_main_returns_zero_by_default_with_critical(self, tmp_path, capsys):
         """Test that main.py returns 0 even with CRITICAL issues by default"""
         # Import main module
         import main
@@ -153,7 +151,7 @@ class TestExitCodeBehavior:
         finally:
             sys.argv = old_argv
     
-    def test_main_returns_one_in_strict_mode_with_critical(self, tmp_path):
+    def test_main_returns_one_in_strict_mode_with_critical(self, tmp_path, capsys):
         """Test that main.py returns 1 with --strict flag when CRITICAL issues found"""
         import main
         
@@ -179,7 +177,7 @@ class TestExitCodeBehavior:
         finally:
             sys.argv = old_argv
     
-    def test_main_returns_zero_in_strict_mode_without_critical(self, tmp_path):
+    def test_main_returns_zero_in_strict_mode_without_critical(self, tmp_path, capsys):
         """Test that main.py returns 0 with --strict flag when no CRITICAL issues"""
         import main
         
