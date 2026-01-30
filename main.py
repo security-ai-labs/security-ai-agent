@@ -37,6 +37,11 @@ def parse_args():
         type=str,
         help='Output file for analysis results (JSON format)'
     )
+    parser.add_argument(
+        '--strict',
+        action='store_true',
+        help='Exit with error code if CRITICAL issues found (default: False)'
+    )
     return parser.parse_args()
 
 def post_to_github(results: dict):
@@ -161,16 +166,27 @@ def main():
     if results['comments']:
         post_to_github(results)
     
-    # Return exit code based on findings
+    # Return exit code based on findings and strict mode
+    if args.strict:
+        if results['severity_counts'].get('CRITICAL', 0) > 0:
+            print("🚨 CRITICAL issues found - Failing check (strict mode)")
+            return 1
+        elif results['total_vulnerabilities'] > 0:
+            print("⚠️ Issues found - Passing with warnings")
+            return 0
+        else:
+            print("✅ No issues found")
+            return 0
+    
+    # Default: always succeed, just report
     if results['severity_counts'].get('CRITICAL', 0) > 0:
-        print("🚨 CRITICAL issues found - Failing check")
-        return 1
+        print("🚨 CRITICAL issues found - Review recommended")
     elif results['total_vulnerabilities'] > 0:
-        print("⚠️ Issues found - Review required")
-        return 0
+        print("⚠️ Issues found - Review recommended")
     else:
         print("✅ No issues found")
-        return 0
+    
+    return 0  # Always succeed by default
 
 if __name__ == "__main__":
     exit_code = main()
