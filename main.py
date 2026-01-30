@@ -6,11 +6,38 @@ Analyzes code repositories for Web2 and Web3 vulnerabilities
 
 import os
 import sys
+import argparse
+import json
 
-# Add src to path
-sys.path.insert(0, 'src')
+# Add src to path - use absolute path relative to script location
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(script_dir, 'src'))
 
 from analyzer import SecurityAnalyzer
+
+def parse_args():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(
+        description='Web3 Security Analyzer - Scan code for vulnerabilities'
+    )
+    parser.add_argument(
+        '--target',
+        type=str,
+        default='.',
+        help='Target directory to analyze (default: current directory)'
+    )
+    parser.add_argument(
+        '--rules',
+        type=str,
+        default='config/vulnerability_rules.json',
+        help='Path to vulnerability rules JSON file (default: config/vulnerability_rules.json)'
+    )
+    parser.add_argument(
+        '--output',
+        type=str,
+        help='Output file for analysis results (JSON format)'
+    )
+    return parser.parse_args()
 
 def post_to_github(results: dict):
     """Post findings to GitHub PR if in Actions"""
@@ -66,22 +93,50 @@ def _generate_summary(results: dict) -> str:
 
 def main():
     """Main entry point"""
+    args = parse_args()
+    
+    # Convert to absolute path
+    target_dir = os.path.abspath(args.target)
+    
+    if not os.path.exists(target_dir):
+        print(f"❌ Error: Target directory does not exist: {target_dir}")
+        return 1
+    
+    if not os.path.isdir(target_dir):
+        print(f"❌ Error: Target path is not a directory: {target_dir}")
+        return 1
     
     print("\n" + "="*60)
     print("  🛡️  Web3 Security Agent")
+    print("="*60)
+    print(f"  Target: {target_dir}")
     print("="*60 + "\n")
     
-    # Initialize analyzer
-    analyzer = SecurityAnalyzer('config/vulnerability_rules.json')
+    # Initialize analyzer with rules file path
+    # If rules path is relative, make it relative to script location
+    rules_path = args.rules
+    if not os.path.isabs(rules_path):
+        rules_path = os.path.join(script_dir, rules_path)
+    
+    if not os.path.exists(rules_path):
+        print(f"❌ Error: Rules file not found: {rules_path}")
+        return 1
+    
+    if not os.path.isfile(rules_path):
+        print(f"❌ Error: Rules path is not a file: {rules_path}")
+        return 1
+    
+    analyzer = SecurityAnalyzer(rules_path)
     
     # Analyze repository
-    results = analyzer.analyze_repository('.')
+    results = analyzer.analyze_repository(target_dir)
     
     # Print summary
     print(f"\n{'='*60}")
     print("  📊 Analysis Summary")
     print(f"{'='*60}\n")
     
+    print(f"Target Directory: {target_dir}")
     print(f"Total Files: {results['total_files']}")
     print(f"Files with Issues: {results['files_with_issues']}")
     print(f"Total Vulnerabilities: {results['total_vulnerabilities']}\n")
@@ -92,6 +147,15 @@ def main():
         print(f"  {severity:10}: {count}")
     
     print(f"\n{'='*60}\n")
+    
+    # Save output if requested
+    if args.output:
+        try:
+            with open(args.output, 'w') as f:
+                json.dump(results, f, indent=2)
+            print(f"📝 Results saved to: {args.output}\n")
+        except (IOError, OSError) as e:
+            print(f"⚠️  Error saving results to {args.output}: {str(e)}\n")
     
     # Post to GitHub if in Actions
     if results['comments']:

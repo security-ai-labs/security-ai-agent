@@ -56,8 +56,7 @@ pip install -r requirements-dev.txt
 
 ## Usage
 
-### Analyze a Repository
-
+### Scan Current Directory
 ```bash
 python main.py
 ```
@@ -66,6 +65,34 @@ This will:
 1. Scan all security-relevant files in the current directory
 2. Detect vulnerabilities using pattern matching
 3. Generate a security report with findings
+
+### Scan Specific Directory
+```bash
+python main.py --target /path/to/repository
+```
+
+### Scan with Custom Rules
+```bash
+python main.py --target /path/to/repo --rules custom_rules.json
+```
+
+### Save Results to File
+```bash
+python main.py --target /path/to/repo --output results.json
+```
+
+### Use in CI/CD (Scan External Repository)
+```bash
+# Clone target repository
+git clone https://github.com/org/target-repo.git
+
+# Clone security agent
+git clone https://github.com/security-ai-labs/security-ai-agent.git
+
+# Run analysis
+cd security-ai-agent
+python main.py --target ../target-repo
+```
 
 ### GitHub PR Integration
 
