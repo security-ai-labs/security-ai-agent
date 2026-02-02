@@ -139,8 +139,18 @@ def analyze_file(filepath: str, language: str = None, model: str = None, detaile
             console.print(f"[red]❌ Analysis failed: {e}[/red]")
             sys.exit(1)
     
-    # Display metadata
+    # SAFETY CHECK: Ensure result is a dict
+    if not isinstance(result, dict):
+        console.print(f"[red]❌ Unexpected result type: {type(result)}[/red]")
+        console.print(f"Result: {result}")
+        sys.exit(1)
+    
+    # Display metadata with safety checks
     metadata = result.get('metadata', {})
+    if not isinstance(metadata, dict):
+        console.print(f"[yellow]⚠️  Warning: metadata is not a dict: {type(metadata)}[/yellow]")
+        metadata = {}
+    
     lang = metadata.get('language', 'unknown')
     category = metadata.get('category', 'unknown')
     icon = LANGUAGE_ICONS.get(lang, '📄')
@@ -157,12 +167,20 @@ def analyze_file(filepath: str, language: str = None, model: str = None, detaile
         border_style="blue"
     ))
     
-    # Display vulnerabilities
+    # Display vulnerabilities with safety checks
     vulnerabilities = result.get('vulnerabilities', [])
+    if not isinstance(vulnerabilities, list):
+        console.print(f"[yellow]⚠️  Warning: vulnerabilities is not a list: {type(vulnerabilities)}[/yellow]")
+        vulnerabilities = []
+    
     print_vulnerabilities(vulnerabilities)
     
-    # Display summary
+    # Display summary with safety checks
     summary = result.get('summary', {})
+    if not isinstance(summary, dict):
+        console.print(f"[yellow]⚠️  Warning: summary is not a dict: {type(summary)}[/yellow]")
+        summary = {}
+    
     console.print()
     console.print(Panel(
         f"Total Issues: {summary.get('total_issues', 0)}\n\n"
@@ -176,7 +194,7 @@ def analyze_file(filepath: str, language: str = None, model: str = None, detaile
     
     # Display overall assessment
     assessment = result.get('overall_assessment', '')
-    if assessment:
+    if assessment and isinstance(assessment, str):
         console.print()
         console.print(Panel(
             assessment,
@@ -189,8 +207,9 @@ def analyze_file(filepath: str, language: str = None, model: str = None, detaile
         console.print()
         console.print("[bold cyan]📋 Detailed Vulnerability Report:[/bold cyan]\n")
         for i, vuln in enumerate(vulnerabilities, 1):
-            print_vulnerability_details(vuln, i)
-            console.print()
+            if isinstance(vuln, dict):  # Safety check
+                print_vulnerability_details(vuln, i)
+                console.print()
     
     # Save report
     output_file = Path(filepath).stem + "_security_report.json"
@@ -206,7 +225,6 @@ def analyze_file(filepath: str, language: str = None, model: str = None, detaile
         console.print("\n⚡ [yellow]Result from cache (no API cost)[/yellow]")
     
     console.print()
-
 
 def print_usage():
     """Print usage information"""
