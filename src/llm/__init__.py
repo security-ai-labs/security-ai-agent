@@ -1,0 +1,7 @@
+"""
+LLM module for security analysis
+"""
+
+from .llm_client import LLMClient
+
+__all__ = ['LLMClient']

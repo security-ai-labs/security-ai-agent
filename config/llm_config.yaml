@@ -1,0 +1,35 @@
+# LLM Configuration
+default_model: "gpt-4o-mini"
+
+models:
+  gpt-4o-mini:
+    provider: "openai"
+    max_tokens: 4000
+    temperature: 0.1
+    cost_per_1k_input: 0.00015
+    cost_per_1k_output: 0.0006
+  
+  gpt-4o:
+    provider: "openai"
+    max_tokens: 4000
+    temperature: 0.1
+    cost_per_1k_input: 0.0025
+    cost_per_1k_output: 0.01
+
+# Cost limits
+cost_limits:
+  per_analysis: 0.50
+  daily: 10.00
+  monthly: 100.00
+
+# Caching
+cache:
+  enabled: true
+  ttl_hours: 24
+  max_size_mb: 100
+
+# Analysis settings
+analysis:
+  max_file_size_kb: 500
+  timeout_seconds: 30
+  retry_attempts: 3
