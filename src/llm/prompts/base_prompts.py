@@ -1,6 +1,6 @@
 """
 Base security analysis prompts - All languages
-Enhanced with pattern detection and false positive reduction
+Enhanced with intelligent pattern detection and context-aware analysis
 """
 
 import re
@@ -91,7 +91,7 @@ Common Solidity Vulnerabilities:
 
 1. Reentrancy:
    VULNERABLE: External call before state update
-   SECURE: State update before external call
+   SECURE: State update before external call + nonReentrant modifier
 
 2. Access Control:
    VULNERABLE: No modifier on privileged functions
@@ -144,92 +144,249 @@ LANGUAGE_EXAMPLES = {
 }
 
 # ============================================================================
-# SECURITY PATTERN DETECTION
+# INTELLIGENT SECURITY PATTERN DETECTION
 # ============================================================================
 
 
 def detect_security_patterns(code: str, language: str) -> List[str]:
     """
-    Detect existing security patterns in code
-    This helps reduce false positives by identifying mitigations already in place
+    Intelligently detect security patterns and their actual usage
+    Returns both properly implemented patterns AND misconfigurations
     """
     patterns = []
 
     if language == "solidity":
-        # Reentrancy protection
-        if re.search(
-            r"import.*ReentrancyGuard|is\s+ReentrancyGuard|nonReentrant", code
-        ):
-            patterns.append("ReentrancyGuard - protects against reentrancy attacks")
+        # ===== ReentrancyGuard Analysis =====
+        has_reentrancy_import = re.search(r"import.*ReentrancyGuard", code)
+        is_reentrancy_inherited = re.search(
+            r"is\s+ReentrancyGuard|is\s+\w+,\s*ReentrancyGuard|is\s+ReentrancyGuard\s*,",
+            code,
+        )
+        nonreentrant_uses = len(re.findall(r"\bnonReentrant\b", code))
 
-        # Version check for overflow protection
-        if re.search(
-            r"pragma\s+solidity\s+\^0\.[8-9]|pragma\s+solidity\s+\^[1-9]", code
-        ):
-            patterns.append(
-                "Solidity 0.8+ - built-in integer overflow/underflow protection"
-            )
+        if has_reentrancy_import or is_reentrancy_inherited:
+            if is_reentrancy_inherited and nonreentrant_uses > 0:
+                patterns.append(
+                    f"ReentrancyGuard: Inherited and applied to {nonreentrant_uses} function(s). Verify ALL state-changing functions use it."
+                )
+            elif is_reentrancy_inherited and nonreentrant_uses == 0:
+                patterns.append(
+                    "WARNING: ReentrancyGuard inherited but NEVER USED in any function - likely missing protection!"
+                )
+            elif has_reentrancy_import and not is_reentrancy_inherited:
+                patterns.append(
+                    "WARNING: ReentrancyGuard imported but contract does NOT inherit it - protection not active!"
+                )
 
-        # Access control
-        if re.search(r"import.*AccessControl|import.*Ownable", code):
-            patterns.append(
-                "OpenZeppelin AccessControl/Ownable - role-based access control"
-            )
-        if re.search(r"onlyOwner|onlyRole|hasRole", code):
-            patterns.append("Access control modifiers present")
+        # ===== Solidity Version Analysis =====
+        version_match = re.search(r"pragma\s+solidity\s+[\^>=<]*(\d+)\.(\d+)", code)
+        if version_match:
+            major, minor = int(version_match.group(1)), int(version_match.group(2))
+            if (major == 0 and minor >= 8) or major > 0:
+                patterns.append(
+                    f"Solidity {major}.{minor}+ detected - Built-in overflow/underflow protection active"
+                )
+                # Check for unnecessary SafeMath
+                if re.search(r"using\s+SafeMath", code):
+                    patterns.append(
+                        "NOTE: SafeMath used with Solidity 0.8+ - unnecessary but not harmful"
+                    )
 
-        # Safe transfers
-        if re.search(r"import.*SafeERC20|using\s+SafeERC20", code):
-            patterns.append("SafeERC20 - safe token transfer operations")
-        if re.search(r"safeTransfer|safeTransferFrom", code):
-            patterns.append("Using safe transfer methods")
+        # ===== AccessControl Analysis =====
+        has_access_import = re.search(r"import.*AccessControl", code)
+        is_access_inherited = re.search(
+            r"is\s+AccessControl|is\s+\w+,\s*AccessControl|is\s+AccessControl\s*,", code
+        )
+        role_checks = re.findall(r"\bonlyRole\b|\bhasRole\b|\b_grantRole\b", code)
 
-        # Pausable
-        if re.search(r"import.*Pausable|is\s+Pausable|whenNotPaused", code):
-            patterns.append("Pausable - emergency pause functionality")
+        if has_access_import or is_access_inherited:
+            if is_access_inherited and len(role_checks) > 0:
+                patterns.append(
+                    f"AccessControl: Inherited with {len(role_checks)} role check(s) found. Verify ALL admin functions protected."
+                )
+            elif is_access_inherited and len(role_checks) == 0:
+                patterns.append(
+                    "WARNING: AccessControl inherited but NO role checks found - protection not applied!"
+                )
+            elif has_access_import and not is_access_inherited:
+                patterns.append(
+                    "WARNING: AccessControl imported but NOT inherited - protection not active!"
+                )
+
+        # ===== Ownable Analysis =====
+        has_ownable_import = re.search(r"import.*Ownable", code)
+        is_ownable_inherited = re.search(
+            r"is\s+Ownable|is\s+\w+,\s*Ownable|is\s+Ownable\s*,", code
+        )
+        onlyowner_uses = len(re.findall(r"\bonlyOwner\b", code))
+
+        if has_ownable_import or is_ownable_inherited:
+            if is_ownable_inherited and onlyowner_uses > 0:
+                patterns.append(
+                    f"Ownable: Inherited with {onlyowner_uses} onlyOwner modifier(s) applied"
+                )
+            elif is_ownable_inherited and onlyowner_uses == 0:
+                patterns.append(
+                    "WARNING: Ownable inherited but onlyOwner NEVER used - missing access control!"
+                )
+
+        # ===== SafeERC20 Analysis =====
+        has_safeerc20_import = re.search(r"import.*SafeERC20", code)
+        has_safeerc20_using = re.search(r"using\s+SafeERC20\s+for\s+IERC20", code)
+        safetransfer_uses = len(
+            re.findall(r"\bsafeTransfer\b|\bsafeTransferFrom\b", code)
+        )
+        unsafe_transfer_uses = len(
+            re.findall(r"\.transfer\((?!.*safe)|\.transferFrom\((?!.*safe)", code)
+        )
+
+        if has_safeerc20_import or has_safeerc20_using:
+            if has_safeerc20_using and safetransfer_uses > 0:
+                patterns.append(
+                    f"SafeERC20: Active with {safetransfer_uses} safe transfer(s)"
+                )
+                if unsafe_transfer_uses > 0:
+                    patterns.append(
+                        f"WARNING: Found {unsafe_transfer_uses} UNSAFE transfer(s) alongside SafeERC20 - inconsistent protection!"
+                    )
+            elif has_safeerc20_import and not has_safeerc20_using:
+                patterns.append(
+                    "WARNING: SafeERC20 imported but NOT declared with 'using' - protection not active!"
+                )
+
+        # ===== Pausable Analysis =====
+        has_pausable_import = re.search(r"import.*Pausable", code)
+        is_pausable_inherited = re.search(
+            r"is\s+Pausable|is\s+\w+,\s*Pausable|is\s+Pausable\s*,", code
+        )
+        pausable_modifiers = len(re.findall(r"\bwhenNotPaused\b|\bwhenPaused\b", code))
+
+        if has_pausable_import or is_pausable_inherited:
+            if is_pausable_inherited and pausable_modifiers > 0:
+                patterns.append(
+                    f"Pausable: Inherited with {pausable_modifiers} pause modifier(s) applied"
+                )
+            elif is_pausable_inherited and pausable_modifiers == 0:
+                patterns.append(
+                    "WARNING: Pausable inherited but whenNotPaused NEVER used - pause won't work!"
+                )
 
     elif language == "python":
-        # SQL injection protection
-        if re.search(r'execute\([^,]*,\s*\(|execute\([^"\']*[\?\%]s', code):
-            patterns.append("Parameterized SQL queries - prevents SQL injection")
+        # ===== SQL Injection Protection =====
+        parameterized_queries = len(
+            re.findall(r'execute\([^,]*,\s*\(|execute\([^"\']*[\?\%]s', code)
+        )
+        concat_queries = len(
+            re.findall(r'execute\([\'"].*\+.*[\'"]|execute\(f[\'"]', code)
+        )
+
+        if parameterized_queries > 0:
+            patterns.append(
+                f"Parameterized SQL queries: {parameterized_queries} safe query/queries found"
+            )
+            if concat_queries > 0:
+                patterns.append(
+                    f"WARNING: Found {concat_queries} string-concatenated query/queries - SQL injection risk!"
+                )
+
+        # ===== ORM Usage =====
         if re.search(r"from\s+sqlalchemy|import\s+sqlalchemy", code):
-            patterns.append("SQLAlchemy ORM - safe query handling")
+            patterns.append(
+                "SQLAlchemy ORM detected - generally safe from SQL injection"
+            )
 
-        # Rate limiting
-        if re.search(r"from\s+flask_limiter|import.*Limiter|@limiter\.limit", code):
-            patterns.append("Rate limiting implemented")
+        # ===== Rate Limiting =====
+        has_limiter_import = re.search(r"from\s+flask_limiter|import.*Limiter", code)
+        limiter_decorators = len(re.findall(r"@limiter\.limit|@.*limit\(", code))
 
-        # Secure comparison
+        if has_limiter_import:
+            if limiter_decorators > 0:
+                patterns.append(
+                    f"Rate limiting: Active on {limiter_decorators} endpoint(s)"
+                )
+            else:
+                patterns.append(
+                    "WARNING: Flask-Limiter imported but NO @limiter.limit decorators found!"
+                )
+
+        # ===== Secure Comparison =====
         if re.search(r"hmac\.compare_digest|constant_time_compare", code):
-            patterns.append("Timing-safe comparison - prevents timing attacks")
+            patterns.append("Timing-safe comparison: Using hmac.compare_digest")
 
-        # Input validation
-        if re.search(
-            r"from\s+.*\s+import\s+.*[Vv]alidator|@.*validate|validationResult", code
-        ):
-            patterns.append("Input validation framework")
+        # ===== Input Validation =====
+        has_validator = re.search(
+            r"from\s+.*\s+import\s+.*[Vv]alidator|@.*validate", code
+        )
+        if has_validator:
+            patterns.append("Input validation framework detected")
+
+        # ===== CORS Configuration =====
+        if re.search(r"from\s+flask_cors\s+import\s+CORS", code):
+            if re.search(r"CORS\(app\)(?!\s*,)", code):
+                patterns.append(
+                    "WARNING: CORS enabled for ALL origins - security risk!"
+                )
+            else:
+                patterns.append("CORS: Configured (verify origin restrictions)")
 
     elif language in ["javascript", "typescript"]:
-        # CSRF protection
-        if re.search(r'require\([\'"]csurf|import.*csurf|csrfProtection', code):
-            patterns.append("CSRF protection enabled")
+        # ===== CSRF Protection =====
+        has_csrf_import = re.search(r'require\([\'"]csurf|import.*csurf', code)
+        csrf_middleware = re.search(r"csrfProtection|csurf\(\)", code)
+        csrf_usage = len(re.findall(r"csrfProtection|csrfToken", code))
 
-        # Input sanitization
-        if re.search(r"DOMPurify\.sanitize|validator\.escape|sanitize\(", code):
-            patterns.append("Input sanitization implemented")
+        if has_csrf_import:
+            if csrf_middleware and csrf_usage > 1:
+                patterns.append(f"CSRF protection: Active with {csrf_usage} usage(s)")
+            elif has_csrf_import and not csrf_middleware:
+                patterns.append(
+                    "WARNING: csurf imported but NOT configured as middleware!"
+                )
 
-        # Security headers
-        if re.search(r'require\([\'"]helmet|import.*helmet|app\.use\(helmet', code):
-            patterns.append("Helmet security headers configured")
+        # ===== Input Sanitization =====
+        has_dompurify = re.search(
+            r"DOMPurify|require.*dompurify|import.*dompurify", code
+        )
+        sanitize_calls = len(re.findall(r"\.sanitize\(|sanitize\(", code))
 
-        # Rate limiting
-        if re.search(r"express-rate-limit|rateLimit\(", code):
-            patterns.append("Rate limiting configured")
+        if has_dompurify:
+            if sanitize_calls > 0:
+                patterns.append(
+                    f"Input sanitization: DOMPurify used {sanitize_calls} time(s)"
+                )
+            else:
+                patterns.append(
+                    "WARNING: DOMPurify imported but .sanitize() NEVER called!"
+                )
 
-        # JWT algorithm specification
-        if re.search(r"jwt\.verify\([^,]+,\s*[^,]+,\s*\{\s*algorithms", code):
+        # ===== Helmet Security Headers =====
+        has_helmet = re.search(r'require\([\'"]helmet|import.*helmet', code)
+        helmet_usage = re.search(r"app\.use\(helmet", code)
+
+        if has_helmet:
+            if helmet_usage:
+                patterns.append("Helmet: Security headers configured")
+            else:
+                patterns.append("WARNING: Helmet imported but NOT used with app.use()!")
+
+        # ===== Rate Limiting =====
+        has_rate_limit = re.search(r"express-rate-limit|rateLimit", code)
+        if has_rate_limit:
+            patterns.append("Rate limiting: Configured")
+
+        # ===== JWT Algorithm Specification =====
+        jwt_verify_secure = re.search(
+            r"jwt\.verify\([^,]+,\s*[^,]+,\s*\{\s*algorithms", code
+        )
+        jwt_verify_insecure = re.search(
+            r"jwt\.verify\([^,]+,\s*[^,]+\)(?!\s*,\s*\{)", code
+        )
+
+        if jwt_verify_secure:
+            patterns.append("JWT: Algorithm specified in verification")
+        if jwt_verify_insecure:
             patterns.append(
-                "JWT algorithm specification - prevents algorithm confusion"
+                "WARNING: JWT verification WITHOUT algorithm specification - security risk!"
             )
 
     return patterns
@@ -257,14 +414,14 @@ Your task is to analyze code for security vulnerabilities and provide:
 CRITICAL RULES:
 - Be thorough but concise
 - Focus on EXPLOITABLE vulnerabilities only
-- Do NOT report issues that are already mitigated by security patterns
-- Avoid false positives and style issues
+- Security imports/inheritance do NOT guarantee protection
+- Verify that security measures are ACTUALLY APPLIED to vulnerable functions
 - Include confidence levels for each finding
-- Only report REAL vulnerabilities with security impact"""
+- Report REAL vulnerabilities with concrete exploit scenarios"""
 
 
 def get_analysis_prompt(code: str, language: str, filepath: str) -> str:
-    """Get enhanced analysis prompt with context awareness"""
+    """Get enhanced analysis prompt with intelligent context awareness"""
 
     # Detect security patterns FIRST
     security_patterns = detect_security_patterns(code, language)
@@ -274,20 +431,32 @@ def get_analysis_prompt(code: str, language: str, filepath: str) -> str:
     if security_patterns:
         patterns_text = "\n".join(f"- {pattern}" for pattern in security_patterns)
         context_section = f"""
-## DETECTED SECURITY MEASURES:
+## DETECTED SECURITY PATTERNS AND CONFIGURATIONS:
 
-The code already implements these security patterns:
 {patterns_text}
 
-IMPORTANT INSTRUCTIONS:
-- Do NOT flag vulnerabilities that are already mitigated by these patterns
-- For example:
-  * If ReentrancyGuard is present, do NOT flag reentrancy unless incorrectly used
-  * If parameterized queries are used, do NOT flag SQL injection
-  * If Solidity 0.8+, do NOT flag integer overflow (built-in protection)
-  * If SafeERC20 is used, do NOT flag unchecked transfers
-  * If CSRF protection exists, do NOT flag CSRF unless misconfigured
-- Only report if mitigation is INCORRECTLY implemented or MISSING
+CRITICAL ANALYSIS INSTRUCTIONS:
+
+1. These patterns show what's IMPORTED/INHERITED, not necessarily what's USED correctly
+2. You MUST verify that security measures are ACTUALLY APPLIED:
+   - If ReentrancyGuard is inherited, check EACH state-changing function has nonReentrant
+   - If AccessControl is inherited, check EACH admin function has proper role modifiers
+   - If SafeERC20 is declared, check ALL token transfers use safe methods
+   
+3. REPORT vulnerabilities when:
+   - Security library is imported but NOT inherited
+   - Security library is inherited but modifiers are MISSING on vulnerable functions
+   - Security library is used INCONSISTENTLY (some functions protected, others not)
+   - Security measure is applied INCORRECTLY
+
+4. EXAMPLES of what to flag:
+   - Contract inherits ReentrancyGuard but deposit() lacks nonReentrant modifier
+   - Contract has AccessControl but updateOracle() has NO access control
+   - Contract uses SafeERC20 in some places but plain transfer() in others
+   - JWT verification without algorithm specification despite importing jwt library
+
+DO NOT ASSUME PROTECTION EXISTS JUST BECAUSE A LIBRARY IS IMPORTED!
+Verify actual usage on EVERY potentially vulnerable function!
 
 """
 
@@ -301,7 +470,7 @@ IMPORTANT INSTRUCTIONS:
     # Build vulnerability list
     vuln_list = "\n".join(f"- {v}" for v in vulns)
 
-    # Build the prompt WITHOUT code blocks (causing the issue)
+    # Build the prompt
     prompt = f"""Analyze the following {language.upper()} code for security vulnerabilities.
 
 FILE: {filepath}
@@ -351,11 +520,11 @@ CRITICAL ANALYSIS GUIDELINES:
    - MEDIUM: Likely vulnerability but needs specific conditions
    - LOW: Potential issue but uncertain or depends on context
 
-2. False Positive Prevention:
-   - Check if vulnerability is already MITIGATED before reporting
-   - Verify the security pattern is correctly implemented
-   - Consider the full context (not just isolated lines)
-   - Do not report issues in comments, documentation, or test files
+2. Verification Checklist:
+   - Check if imported security libraries are actually INHERITED
+   - Check if inherited security features are actually USED
+   - Check if security modifiers are applied to ALL relevant functions
+   - Check for inconsistent security patterns (protected in some places, not others)
 
 3. Severity Assessment:
    - CRITICAL: Direct exploit leading to fund loss, data breach, or system compromise
@@ -370,12 +539,12 @@ CRITICAL ANALYSIS GUIDELINES:
    - Proper confidence level
 
 5. Do NOT Report:
-   - Style issues or code quality
-   - Theoretical vulnerabilities without exploit path
-   - Issues already mitigated by detected security patterns
+   - Style issues or code quality concerns
+   - Theoretical vulnerabilities without concrete exploit path
+   - Issues that are ACTUALLY properly mitigated (verify the mitigation exists and is correct)
    - Generic security advice without specific vulnerability
 
-Be precise, be confident, and avoid false positives!"""
+Be precise, verify security measures are ACTUALLY APPLIED, and report REAL vulnerabilities!"""
 
     return prompt
 
